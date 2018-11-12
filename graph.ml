@@ -18,22 +18,6 @@ type edage = {from: node; goto: node; weight: int}
 type node_context = {self : node; edages: (node, weight) Hashtbl.t}
 type graph = (node, node_context) Hashtbl.t
 
-
-(* let make_node_outcontext (mat: (weight option) array array): (node, node_context) Hashtbl.t=
- * let length = Array.length mat in
- * let ctxs = Hashtbl.create length in
- * let rec init_f len idx =
- * if len = idx then () else
- * let _ = Hashtbl.add ctxs idx {self = idx; edages = (Hashtbl.create length)} in init_f len (idx + 1) in
- * let _ = init_f length 0 in
- * let _ = Array.fold_left (fun i vec ->
- * let _ = Array.fold_left (fun j ow ->
- * match ow with
- * | None -> j + 1
- * | Some w -> let _ = Hashtbl.add (Hashtbl.find ctxs j).edages i w in j + 1
- * ) 0 vec in i + 1
- * ) 0 mat in ctxs;; *)
-
 let make_node_context (mat: (weight option) array array): (node, node_context) Hashtbl.t=
 let length = Array.length mat in
 let ctxs = Hashtbl.create length in
@@ -68,16 +52,28 @@ List.fold_left (fun r n -> f r n) start neighbors;;
 let fold_graph (f: 'a -> node -> 'a) (start: 'a) (g: graph) : 'a =
 Hashtbl.fold (fun n ctx r-> f r n) g start;;
 
-(* let merge (graph:graph) (tomerge: node) (dest: node) : unit =
- * Hashtbl.fold (fun neighbor w1 r ->
- * let ow = get_weight_opt graph dest neighbor in
- * match ow with
- * | None -> 
- * let _ = Hashtbl.set (Hashtbl.find g.incontext neighbor) dest w1 in
- * let _ = Hashtbl.set (Hashtbl.find g.incontext neighbor) tomerge 0 in
- * 
- * | Some w2 ->
- * ) (Hashtbl.find g.incontext tomerge) _
- * ) _ neighbors   *)
+let merge (graph:graph) (tomerge: node) (dest: node) : unit =
+if tomerge = dest then () else
+(* wt2n: weight of tomerge node to neighbor node
+ * wd2n: weight of destination node to neighbor node *)
+let tomerge_ctx = (Hashtbl.find graph tomerge).edages in
+let _ = Hashtbl.fold (fun neighbor wt2n r ->
+let neighbor_ctx = (Hashtbl.find graph neighbor).edages in
+let dest_ctx = (Hashtbl.find graph dest).edages in
+let owd2n = Hashtbl.find_opt neighbor_ctx dest in
+match owd2n with
+| None -> 
+let _ = Hashtbl.add neighbor_ctx dest wt2n in
+let _ =
+(* if nerighbor_ctx = dest_ctx, do not add again *)
+if Hashtbl.mem dest_ctx neighbor then () else
+Hashtbl.add dest_ctx neighbor wt2n in
+Hashtbl.remove neighbor_ctx tomerge
+| Some wd2n ->
+let _ = Hashtbl.replace neighbor_ctx dest (wt2n + wd2n) in
+let _ = Hashtbl.replace dest_ctx neighbor (wt2n + wd2n) in
+Hashtbl.remove neighbor_ctx tomerge
+) tomerge_ctx () in
+Hashtbl.remove graph tomerge;;
 
 end;;

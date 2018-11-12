@@ -27,6 +27,7 @@ let test_data = [|
  * line.(j) <- None; (j + 1)
  * else (j + 1)) 0 test_data; i + 1) 0 test_data in *)
 let g = BaseGraph.make_graph test_data in
+let _ = BaseGraph.merge g 15 8 in
 BaseGraph.fold_graph (fun _ node -> print_int node; print_string " ") () g; print_string " ";
 BaseGraph.fold_graph (fun _ node ->
 print_int node; print_string ": ";
