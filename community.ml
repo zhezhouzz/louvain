@@ -38,10 +38,9 @@ module BaseCommu = struct
     let hash = Hashtbl.create n in
     {nextnode; nextgroup; hash}
 
-  let insert (c: community) (node:node) (m: int * weight * weight) =
-match m with
-| (groupidx, inner, outer) ->
-Hashtbl.add c.hash node {idx = groupidx; inner = inner; outer = outer}
+  let insert (c : community) (node : node) (m : int * weight * weight) =
+    match m with groupidx, inner, outer ->
+      Hashtbl.add c.hash node {idx= groupidx; inner; outer}
 
   let init (c : community) (init_meta : int * (int -> int -> group)) :
       community =

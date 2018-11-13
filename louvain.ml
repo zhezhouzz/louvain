@@ -14,19 +14,18 @@ let cal_k_i graph node =
     0.0 graph node
 
 let flow_node_to_nodes graph node nodes =
-List.fold_left
+  List.fold_left
     (fun sum node' ->
       let ow = BaseGraph.get_weight_opt graph node node' in
       match ow with None -> sum | Some w -> sum +. w )
     0.0 nodes
 
 let cal_inner graph node =
-match (BaseGraph.get_weight_opt graph node node) with
-| None -> 0.0
-| Some w -> w
+  match BaseGraph.get_weight_opt graph node node with
+  | None -> 0.0
+  | Some w -> w
 
-let cal_outer graph node =
-(cal_k_i graph node) -. (cal_inner graph node)
+let cal_outer graph node = cal_k_i graph node -. cal_inner graph node
 
 let cal_k_i_in graph node group commu =
   let nodes_in_commu = BaseCommu.which_nodes commu group in
@@ -38,8 +37,11 @@ let cal_m graph =
       BaseGraph.fold_neighbors
         (fun sum' neighbor ->
           let ow = BaseGraph.get_weight_opt graph node neighbor in
-          let w = match ow with None -> 0.0 | Some w ->
-          if node = neighbor then 2.0 *. w else w in
+          let w =
+            match ow with
+            | None -> 0.0
+            | Some w -> if node = neighbor then 2.0 *. w else w
+          in
           sum' +. w )
         sum graph node )
     0.0 graph
@@ -104,9 +106,9 @@ let cal_delta_Q graph node group commu =
  * expr1 -. expr2 -. (expr3 -. expr4 -. expr5);; *)
 
 let cal_delta_Q_move graph node group commu =
-  let k_i_in = (cal_k_i_in graph node group commu) -. (cal_inner graph node) in
+  let k_i_in = cal_k_i_in graph node group commu -. cal_inner graph node in
   let k_i = cal_k_i graph node in
-  let sigma_in = cal_sigma_in group -. k_i_in -. (cal_inner graph node) in
+  let sigma_in = cal_sigma_in group -. k_i_in -. cal_inner graph node in
   let sigma_tot = cal_sigma_tot group -. (k_i -. k_i_in) in
   let m = cal_m graph in
   let _ =
@@ -184,15 +186,18 @@ let find_best_neighbor graph commu node =
   | Some (n, m) -> if m > 0.0 then Some n else None
 
 let rec phase1 graph commu =
-  let if_convergence = BaseGraph.fold_graph
-    (fun if_ node ->
-      let _ = Printf.printf "phase1: node(%i)\n" node in
-      let best_neighbor = find_best_neighbor graph commu node in
-      match best_neighbor with
-      | None -> if_
-      | Some neighbor ->
-let _ = louvain_join graph commu node neighbor in false)
-    true graph in
+  let if_convergence =
+    BaseGraph.fold_graph
+      (fun if_ node ->
+        let _ = Printf.printf "phase1: node(%i)\n" node in
+        let best_neighbor = find_best_neighbor graph commu node in
+        match best_neighbor with
+        | None -> if_
+        | Some neighbor ->
+            let _ = louvain_join graph commu node neighbor in
+            false )
+      true graph
+  in
   if if_convergence then () else phase1 graph commu
 
 let print_commu_state graph commu =
@@ -206,52 +211,78 @@ let print_commu_state graph commu =
     () graph
 
 let print_ll ll =
-(* let _ = Printf.printf "length = %i\n" (List.length ll) in *)
-List.fold_left (fun _ l ->
-(* let _ = Printf.printf "  length = %i\n" (List.length l) in *)
-let _ = match l with
-| [] -> ()
-| h :: t ->
-let _ = Printf.printf "Head(%i): " h in
-List.fold_left (fun _ node -> let _ = Printf.printf "%i " node in ()) () t in
-let _ = Printf.printf "\n" in ()) () ll
+  (* let _ = Printf.printf "length = %i\n" (List.length ll) in *)
+  List.fold_left
+    (fun _ l ->
+      (* let _ = Printf.printf "  length = %i\n" (List.length l) in *)
+      let _ =
+        match l with
+        | [] -> ()
+        | h :: t ->
+            let _ = Printf.printf "Head(%i): " h in
+            List.fold_left
+              (fun _ node ->
+                let _ = Printf.printf "%i " node in
+                () )
+              () t
+      in
+      let _ = Printf.printf "\n" in
+      () )
+    () ll
 
 let phase2 graph commu =
-let groups = BaseCommu.to_groups commu in
-let _ = print_ll groups in
-List.fold_left (fun _ l ->
-match l with
-| [] -> ()
-| h :: t ->
-List.fold_left (fun _ node ->
-BaseGraph.merge graph node h) () t) () groups
+  let groups = BaseCommu.to_groups commu in
+  let _ = print_ll groups in
+  List.fold_left
+    (fun _ l ->
+      match l with
+      | [] -> ()
+      | h :: t ->
+          List.fold_left (fun _ node -> BaseGraph.merge graph node h) () t )
+    () groups
 
 let print_graph graph =
-let _ = print_string "======================================================\n" in
-let _ = BaseGraph.fold_graph (fun _ node ->
-let _ = Printf.printf "[Graph][Node(%i)]: " node in
-let _ = BaseGraph.fold_neighbors (fun _ neighbors ->
-let e = BaseGraph.get_edage graph node neighbors in
-let _ = Printf.printf "{%i -> %i = %f} " e.from e.goto e.weight in
-()) () graph node in
-print_string "\n") () graph in
-print_string "======================================================\n" 
+  let _ =
+    print_string "======================================================\n"
+  in
+  let _ =
+    BaseGraph.fold_graph
+      (fun _ node ->
+        let _ = Printf.printf "[Graph][Node(%i)]: " node in
+        let _ =
+          BaseGraph.fold_neighbors
+            (fun _ neighbors ->
+              let e = BaseGraph.get_edage graph node neighbors in
+              let _ =
+                Printf.printf "{%i -> %i = %f} " e.from e.goto e.weight
+              in
+              () )
+            () graph node
+        in
+        print_string "\n" )
+      () graph
+  in
+  print_string "======================================================\n"
 
 let rec louvain_loop g graph_length =
-let init_f node groupid : BaseCommu.group =
-  {idx= groupid; inner= 0.0; outer= cal_k_i g node}
-in
-let test_c = BaseCommu.make 1024 in
-let _ = BaseGraph.fold_graph (fun _ node ->
-BaseCommu.insert test_c node (node, (cal_inner g node), (cal_outer g node))) () g in
- (* BaseCommu.init (BaseCommu.make 1024) (BaseGraph.length g, init_f) in *)
-let _ = phase1 g test_c in
-let _ = phase2 g test_c in
-let _ = print_graph g in
-let _ = Printf.printf "Q = %f\n" (cal_Q g test_c) in
-let graph_length' = BaseGraph.length g in
-if graph_length' = graph_length then ()
-else louvain_loop g graph_length'
+  let init_f node groupid : BaseCommu.group =
+    {idx= groupid; inner= 0.0; outer= cal_k_i g node}
+  in
+  let test_c = BaseCommu.make 1024 in
+  let _ =
+    BaseGraph.fold_graph
+      (fun _ node ->
+        BaseCommu.insert test_c node (node, cal_inner g node, cal_outer g node)
+        )
+      () g
+  in
+  (* BaseCommu.init (BaseCommu.make 1024) (BaseGraph.length g, init_f) in *)
+  let _ = phase1 g test_c in
+  let _ = phase2 g test_c in
+  let _ = print_graph g in
+  let _ = Printf.printf "Q = %f\n" (cal_Q g test_c) in
+  let graph_length' = BaseGraph.length g in
+  if graph_length' = graph_length then () else louvain_loop g graph_length'
 
 ;;
 let test_data =
@@ -281,7 +312,8 @@ let test_data2 =
 let g = BaseGraph.make_graph test_data2 in
 let _ = Printf.printf "m = %f\n" (cal_m g) in
 let _ = louvain_loop g (BaseGraph.length g) in
-();;
+()
+
 (* let init_f node groupid : BaseCommu.group =
  *   {idx= groupid; inner= 0.0; outer= cal_k_i g node}
  * in
