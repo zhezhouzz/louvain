@@ -1,22 +1,28 @@
 module type Graph = sig
+type weight
 type node
 type edage
 type graph
 
+val length : graph -> int
 val make_graph : 'a -> graph
 val get_neighbors : graph -> node -> node list
 val get_edage : graph -> node -> node -> edage
+val get_weight_opt : graph -> node -> node -> weight option
 val fold_neighbors : ('a -> node -> 'a) -> 'a -> graph -> node -> 'a
 val fold_graph : ('a -> node -> 'a) -> 'a -> graph -> 'a
 val merge : graph -> node -> node -> unit
 end;;
 
 module BaseGraph = struct
-type weight = int
+type weight = float
 type node = int
-type edage = {from: node; goto: node; weight: int}
+type edage = {from: node; goto: node; weight: weight}
 type node_context = {self : node; edages: (node, weight) Hashtbl.t}
 type graph = (node, node_context) Hashtbl.t
+
+let length (graph: graph) : int =
+Hashtbl.length graph;;
 
 let make_node_context (mat: (weight option) array array): (node, node_context) Hashtbl.t=
 let length = Array.length mat in
@@ -70,8 +76,8 @@ if Hashtbl.mem dest_ctx neighbor then () else
 Hashtbl.add dest_ctx neighbor wt2n in
 Hashtbl.remove neighbor_ctx tomerge
 | Some wd2n ->
-let _ = Hashtbl.replace neighbor_ctx dest (wt2n + wd2n) in
-let _ = Hashtbl.replace dest_ctx neighbor (wt2n + wd2n) in
+let _ = Hashtbl.replace neighbor_ctx dest (wt2n +. wd2n) in
+let _ = Hashtbl.replace dest_ctx neighbor (wt2n +. wd2n) in
 Hashtbl.remove neighbor_ctx tomerge
 ) tomerge_ctx () in
 Hashtbl.remove graph tomerge;;
