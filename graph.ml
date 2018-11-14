@@ -32,7 +32,19 @@ module type Graph = sig
 
   val extract_graph : graph -> node -> graph
 
-  val merge_node_corossgraph : graph -> node -> graph -> graph -> unit
+  val merge_node_crossgraph : graph -> node -> graph -> graph -> unit
+
+  val dump : graph -> graph -> unit 
+
+  val get_inner : graph -> weight
+
+  val get_outer : graph -> weight
+
+  val flow_n2g_opt : graph -> node -> graph -> weight option
+
+  val low_n2g_default : graph -> node -> graph -> weight -> weight
+
+  val get_degree : graph -> node -> weight
 end
 
 module BaseGraph = struct
@@ -75,7 +87,17 @@ module BaseGraph = struct
           i + 1 )
         0 mat
     in
-    {inner= 0.0; outer= 0.0; hash}
+    let inner =
+      Hashtbl.fold
+        (fun node nodectx sum ->
+          Hashtbl.fold
+            (fun node' weight sum' ->
+              let weight' = if node = node' then 2.0 *. weight else weight in
+              sum' +. weight' )
+            nodectx sum )
+        hash 0.0
+    in
+    {inner; outer= 0.0; hash}
 
   (* let get_neighbors (g : graph) (n : node) : node list =
    *   Hashtbl.fold (fun node _ r -> node :: r) (Hashtbl.find g n).weights [] *)
@@ -120,12 +142,25 @@ module BaseGraph = struct
         w +. sum )
       0.0 nodes
 
-  let flow_n2g (graph : graph) (node : node) (sub_graph : graph) : weight =
+  let flow_n2g_opt (graph : graph) (node : node) (sub_graph : graph) :
+      weight option =
     fold_graph
-      (fun sum node' _ ->
-        let w = get_weight_default graph node node' 0.0 in
-        w +. sum )
-      0.0 sub_graph
+      (fun osum node' _ ->
+        let ow = get_weight_opt graph node node' in
+        match ow with
+        | None -> osum
+        | Some w -> (
+          match osum with None -> Some w | Some sum -> Some (w +. sum) ) )
+      None sub_graph
+
+  let none2zero (ow : weight option) =
+    match ow with None -> 0.0 | Some w -> w
+
+  let flow_n2g_default (graph : graph) (node : node) (sub_graph : graph)
+      (default : weight) : weight =
+    match flow_n2g_opt graph node sub_graph with
+    | None -> default
+    | Some w -> w
 
   let extract_graph (graph : graph) (node : node) : graph =
     let hash = Hashtbl.create (length graph) in
@@ -136,13 +171,13 @@ module BaseGraph = struct
     let inner = get_weight_default graph node node 0.0 in
     {inner; outer= get_degree graph node -. inner; hash}
 
-  let merge_node_corssgraph (graph : graph) (node : node)
+  let merge_node_crossgraph (graph : graph) (node : node)
       (origin_graph : graph) (dest_graph : graph) : unit =
     let degree = get_degree graph node in
     let self = get_weight_default graph node node 0.0 in
-    let delta_inner = flow_n2g graph node origin_graph in
+    let delta_inner = none2zero (flow_n2g_opt graph node origin_graph) in
     let delta_outer = degree -. delta_inner -. (delta_inner -. self) in
-    let _ = origin_graph.inner <- origin_graph.inner -. delta_inner in
+    let _ = origin_graph.inner <- origin_graph.inner -. (delta_inner *. 2.0) in
     let _ = origin_graph.outer <- origin_graph.outer -. delta_outer in
     let ctx = Hashtbl.find graph.hash node in
     (* let ctx_origin = Hashtbl.find origin_graph.hash node in *)
@@ -165,10 +200,10 @@ module BaseGraph = struct
         dest_graph.hash
     in
     let _ = Hashtbl.add dest_graph.hash node ctx_dest in
-    let delta_inner' = flow_n2g graph node dest_graph in
+    let delta_inner' = none2zero (flow_n2g_opt graph node dest_graph) in
     let delta_outer' = degree -. delta_inner' -. (delta_inner' -. self) in
-    let _ = dest_graph.inner <- dest_graph.inner -. delta_inner' in
-    let _ = dest_graph.outer <- dest_graph.outer -. delta_outer' in
+    let _ = dest_graph.inner <- dest_graph.inner +. (delta_inner' *. 2.0) in
+    let _ = dest_graph.outer <- dest_graph.outer +. delta_outer' in
     ()
 
   let dump (graph : graph) (sub_graph : graph) : unit =
@@ -182,22 +217,29 @@ module BaseGraph = struct
           (fun node ctx' ->
             if Hashtbl.mem sub_graph.hash node then ()
             else
-              let new_w = flow_n2g graph node sub_graph in
-              let _ = Hashtbl.add new_ctx node new_w in
-              let _ =
-                Hashtbl.iter
-                  (fun node _ ->
-                    if Hashtbl.mem sub_graph.hash node then
-                      Hashtbl.remove ctx' node
-                    else () )
-                  ctx'
-              in
-              Hashtbl.add ctx' head new_w )
+              let onew_w = flow_n2g_opt graph node sub_graph in
+              match onew_w with
+              | None -> ()
+              | Some new_w ->
+                  let _ = Hashtbl.add new_ctx node new_w in
+                  let _ =
+                    Hashtbl.iter
+                      (fun node _ ->
+                        if Hashtbl.mem sub_graph.hash node then
+                          Hashtbl.remove ctx' node
+                        else () )
+                      ctx'
+                  in
+                  Hashtbl.add ctx' head new_w )
           graph
       in
+      let _ = Hashtbl.add new_ctx head sub_graph.inner in
       compre_graph
         (fun node _ ->
           if node = head then Hashtbl.replace graph.hash head new_ctx
           else Hashtbl.remove graph.hash node )
         sub_graph
+
+  let get_inner (graph : graph) = graph.inner
+  let get_outer (graph : graph) = graph.outer
 end

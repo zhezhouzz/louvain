@@ -1,81 +1,36 @@
 open Graph
 open Community
-
-let cal_sigma_in (group : BaseCommu.group) = group.inner
-
-let cal_sigma_tot (group : BaseCommu.group) = group.outer +. group.inner
-
-let cal_k_i graph node =
-  BaseGraph.fold_neighbors
-    (fun sum neighbor ->
-      (* let _ = Printf.printf "<%i - %i>" node neighbor in *)
-      let e = BaseGraph.get_edage graph node neighbor in
-      sum +. e.weight )
-    0.0 graph node
-
-let flow_node_to_nodes graph node nodes =
-  List.fold_left
-    (fun sum node' ->
-      let ow = BaseGraph.get_weight_opt graph node node' in
-      match ow with None -> sum | Some w -> sum +. w )
-    0.0 nodes
-
-let cal_inner graph node =
-  match BaseGraph.get_weight_opt graph node node with
-  | None -> 0.0
-  | Some w -> w
-
-let cal_outer graph node = cal_k_i graph node -. cal_inner graph node
-
-let cal_k_i_in graph node group commu =
-  let nodes_in_commu = BaseCommu.which_nodes commu group in
-  flow_node_to_nodes graph node nodes_in_commu
-
-let cal_m graph =
-  BaseGraph.fold_graph
-    (fun sum node ->
-      BaseGraph.fold_neighbors
-        (fun sum' neighbor ->
-          let ow = BaseGraph.get_weight_opt graph node neighbor in
-          let w =
-            match ow with
-            | None -> 0.0
-            | Some w -> if node = neighbor then 2.0 *. w else w
-          in
-          sum' +. w )
-        sum graph node )
-    0.0 graph
-  /. 2.0
+open Utils
+open Data
 
 let cal_Q graph commu =
-  let m = cal_m graph in
+  let two_m = BaseGraph.get_inner graph in
   let sum =
     BaseGraph.fold_graph
-      (fun sum node1 ->
+      (fun sum i _ ->
         BaseGraph.fold_graph
-          (fun sum' node2 ->
+          (fun sum' j _ ->
             (* let _ = Printf.printf "sum = %f\n" sum' in *)
-            if BaseCommu.in_same_group commu node1 node2 then
-              let ow = BaseGraph.get_weight_opt graph node1 node2 in
-              let weight = match ow with None -> 0.0 | Some w -> w in
-              let ki = cal_k_i graph node1 in
-              let kj = cal_k_i graph node2 in
+            if BaseCommu.in_same_group commu i j then
+              let a_i_j = BaseGraph.get_weight_default graph i j 0.0 in
+              let ki = BaseGraph.get_degree graph i in
+              let kj = BaseGraph.get_degree graph j in
               (* let _ = Printf.printf "<%i,%i>: ki = %f kj = %f\n" node1 node2 ki kj in *)
-              sum' +. (weight -. (ki *. kj /. (2.0 *. m)))
+              sum' +. (a_i_j -. (ki *. kj /. two_m))
             else sum' )
           sum graph )
       0.0 graph
   in
-  sum /. (2.0 *. m)
+  sum /. two_m
 
 let mysqrt x = x *. x
 
-let cal_delta_Q_aux sigma_in sigma_tot k_i k_i_in m =
-  let expr1 = (sigma_in +. (2.0 *. k_i_in)) /. (2.0 *. m) in
-  let expr2 = mysqrt ((sigma_tot +. k_i) /. (2.0 *. m)) in
-  let expr3 = sigma_in /. (2.0 *. m) in
-  let expr4 = mysqrt (sigma_tot /. (2.0 *. m)) in
-  let expr5 = mysqrt (k_i /. (2.0 *. m)) in
+let cal_delta_Q_aux sigma_in sigma_tot k_i k_i_in two_m =
+  let expr1 = (sigma_in +. (2.0 *. k_i_in)) /. two_m in
+  let expr2 = mysqrt ((sigma_tot +. k_i) /. two_m) in
+  let expr3 = sigma_in /. two_m in
+  let expr4 = mysqrt (sigma_tot /. two_m) in
+  let expr5 = mysqrt (k_i /. two_m) in
   (* let _ =
    *   Printf.printf
    *     "expr1 = %f; expr2 = %f; expr3 = %f; expr4 = %f; expr5 = %f\n" expr1
@@ -83,91 +38,56 @@ let cal_delta_Q_aux sigma_in sigma_tot k_i k_i_in m =
    * in *)
   expr1 -. expr2 -. (expr3 -. expr4 -. expr5)
 
-let cal_delta_Q graph node group commu =
-  let sigma_in = cal_sigma_in group in
-  let sigma_tot = cal_sigma_tot group in
-  let k_i = cal_k_i graph node in
-  let k_i_in = cal_k_i_in graph node group commu in
-  let m = cal_m graph in
+let cal_delta_Q graph i graph_dest =
+  let sigma_in = BaseGraph.get_inner graph_dest in
+  let sigma_tot = (BaseGraph.get_outer graph_dest) +. sigma_in in
+  let k_i = BaseGraph.get_degree graph i in
+  let k_i_in = BaseGraph.flow_n2g_default graph i graph_dest 0.0 in
+  let two_m = BaseGraph.get_inner graph in
   (* let _ =
    *   Printf.printf
    *     "sigma_in = %f; sigma_tot = %f; k_i = %f; k_i_in = %f; m = %f\n" sigma_in
    *     sigma_tot k_i k_i_in m
    * in *)
-  cal_delta_Q_aux sigma_in sigma_tot k_i k_i_in m
+  cal_delta_Q_aux sigma_in sigma_tot k_i k_i_in two_m
 
-(* cal_delta_Q_aux sigma_in sigma_tot k_i k_i_in m;; *)
-(* let expr1 = (sigma_in +. 2.0 *. k_i_in) /. (2.0 *. m) in
- * let expr2 = mysqrt ((sigma_tot +. k_i) /. (2.0 *. m)) in
- * let expr3 = sigma_in /. (2.0 *. m) in
- * let expr4 = mysqrt (sigma_tot /. (2.0 *. m)) in
- * let expr5 = mysqrt (k_i /. (2.0 *. m)) in
- * let _ = Printf.printf "expr1 = %f; expr2 = %f; expr3 = %f; expr4 = %f; expr5 = %f\n" expr1 expr2 expr3 expr4 expr5 in 
- * expr1 -. expr2 -. (expr3 -. expr4 -. expr5);; *)
+let n2g_notself node sub_graph =
+BaseGraph.fold_graph (fun sum node' _ ->
+let w = BaseGraph.get_weight_default sub_graph node node' 0.0 in
+let w' = if node = node' then 0.0 else w in
+sum +. w'
+) 0.0 sub_graph
 
-let cal_delta_Q_move graph node group commu =
-  let k_i_in = cal_k_i_in graph node group commu -. cal_inner graph node in
-  let k_i = cal_k_i graph node in
-  let sigma_in = cal_sigma_in group -. k_i_in -. cal_inner graph node in
-  let sigma_tot = cal_sigma_tot group -. (k_i -. k_i_in) in
-  let m = cal_m graph in
+
+let cal_delta_Q_move graph i graph_origin =
+  let k_i_i = BaseGraph.get_weight_default graph_origin i i 0.0 in
+  let k_i_in = n2g_notself i graph_origin in
+  let k_i =  BaseGraph.get_degree graph_origin i in
+  let sigma_in = (BaseGraph.get_inner graph_origin) -. (2.0 *. k_i_i) -. k_i_in in
+  let k_i_out = k_i -. k_i_in -. k_i_i in
+  let sigma_tot = (BaseGraph.get_inner graph_origin) +. (BaseGraph.get_outer graph_origin) -. k_i_out +. k_i_in -. (2.0 *. k_i_i) in
+  let two_m = BaseGraph.get_inner graph in
   let _ =
     Printf.printf
-      "sigma_in = %f; sigma_tot = %f; k_i = %f; k_i_in = %f; m = %f\n" sigma_in
-      sigma_tot k_i k_i_in m
+      "sigma_in = %f; sigma_tot = %f; k_i = %f; k_i_in = %f; two_m = %f\n" sigma_in
+      sigma_tot k_i k_i_in two_m
   in
-  let expr1 = (sigma_in +. (2.0 *. k_i_in)) /. (2.0 *. m) in
-  let expr2 = mysqrt ((sigma_tot +. k_i) /. (2.0 *. m)) in
-  let expr3 = sigma_in /. (2.0 *. m) in
-  let expr4 = mysqrt (sigma_tot /. (2.0 *. m)) in
-  let expr5 = mysqrt (k_i /. (2.0 *. m)) in
-  (* let _ =
-   *   Printf.printf
-   *     "expr1 = %f; expr2 = %f; expr3 = %f; expr4 = %f; expr5 = %f\n" expr1
-   *     expr2 expr3 expr4 expr5
-   * in *)
-  expr1 -. expr2 -. (expr3 -. expr4 -. expr5)
+  cal_delta_Q_aux sigma_in sigma_tot k_i k_i_in two_m
 
-let flow_node_to_nodes graph node nodes =
-  List.fold_left
-    (fun sum neighbor ->
-      let ow = BaseGraph.get_weight_opt graph node neighbor in
-      match ow with None -> sum | Some w -> sum +. w )
-    0.0 nodes
-
-let louvain_join g commu node dest =
-  BaseCommu.join commu node (BaseCommu.which_group commu dest)
-    (fun node (group_from, group_to) ->
-      let inner_flow =
-        flow_node_to_nodes g node (BaseCommu.which_nodes commu group_from)
-      in
-      let outer_flow = cal_k_i g node -. inner_flow in
-      let inner_flow' =
-        flow_node_to_nodes g node (BaseCommu.which_nodes commu group_to)
-      in
-      let outer_flow' = cal_k_i g node -. inner_flow' in
-      ( { idx= group_from.idx
-        ; inner= group_from.inner -. inner_flow
-        ; outer= group_from.outer -. outer_flow +. inner_flow }
-      , { idx= group_to.idx
-        ; inner= group_to.inner +. inner_flow'
-        ; outer= group_to.outer +. outer_flow' -. inner_flow' } ) )
 
 let find_best_neighbor graph commu node =
-  let neighbors = BaseGraph.get_neighbors graph node in
   let best_neighbor =
-    List.fold_left
-      (fun o neighbor ->
+    BaseGraph.fold_neighbors
+      (fun o neighbor _ ->
         let _ = Printf.printf "best: node(%i) neighbor(%i)\n" node neighbor in
         if BaseCommu.in_same_group commu node neighbor then o
         else
           let delta_Q =
-            cal_delta_Q graph node (BaseCommu.which_group commu neighbor) commu
+            cal_delta_Q graph node (BaseCommu.which_group commu neighbor)
           in
           let delta_Q_move =
             cal_delta_Q_move graph node
               (BaseCommu.which_group commu node)
-              commu
           in
           let delta_Q_tot = delta_Q -. delta_Q_move in
           let _ =
@@ -179,7 +99,7 @@ let find_best_neighbor graph commu node =
           | Some (n, m) ->
               if m < delta_Q_tot then Some (neighbor, delta_Q_tot)
               else Some (n, m) )
-      None neighbors
+      None graph node
   in
   match best_neighbor with
   | None -> None
@@ -188,131 +108,52 @@ let find_best_neighbor graph commu node =
 let rec phase1 graph commu =
   let if_convergence =
     BaseGraph.fold_graph
-      (fun if_ node ->
+      (fun if_ node _ ->
         let _ = Printf.printf "phase1: node(%i)\n" node in
         let best_neighbor = find_best_neighbor graph commu node in
         match best_neighbor with
         | None -> if_
         | Some neighbor ->
-            let _ = louvain_join graph commu node neighbor in
+            let _ = BaseGraph.merge_node_crossgraph graph node (BaseCommu.which_group commu node) (BaseCommu.which_group commu neighbor) in
             false )
       true graph
   in
   if if_convergence then () else phase1 graph commu
 
-let print_commu_state graph commu =
-  BaseGraph.fold_graph
-    (fun _ node ->
-      let _ =
-        Printf.printf "node(%i) is in group(%i)\n" node
-          (BaseCommu.which_group commu node).idx
-      in
-      () )
-    () graph
-
-let print_ll ll =
-  (* let _ = Printf.printf "length = %i\n" (List.length ll) in *)
-  List.fold_left
-    (fun _ l ->
-      (* let _ = Printf.printf "  length = %i\n" (List.length l) in *)
-      let _ =
-        match l with
-        | [] -> ()
-        | h :: t ->
-            let _ = Printf.printf "Head(%i): " h in
-            List.fold_left
-              (fun _ node ->
-                let _ = Printf.printf "%i " node in
-                () )
-              () t
-      in
-      let _ = Printf.printf "\n" in
-      () )
-    () ll
+let print_commu_state commu =
+let _ = print_string "<---- PRINT_COMMU_STATE ---->\n" in
+let _ = BaseCommu.compre_commu (fun graph ->
+if BaseGraph.length graph = 0 then ()
+else print_graph graph 
+) commu in
+let _ = print_string "<---- PRINT_COMMU_STATE ---->\n" in
+()
 
 let phase2 graph commu =
-  let groups = BaseCommu.to_groups commu in
-  let _ = print_ll groups in
-  List.fold_left
-    (fun _ l ->
-      match l with
-      | [] -> ()
-      | h :: t ->
-          List.fold_left (fun _ node -> BaseGraph.merge graph node h) () t )
-    () groups
+BaseCommu.compre_commu (fun sub_graph ->
+BaseGraph.dump graph sub_graph
+) commu
 
-let print_graph graph =
-  let _ =
-    print_string "======================================================\n"
-  in
-  let _ =
-    BaseGraph.fold_graph
-      (fun _ node ->
-        let _ = Printf.printf "[Graph][Node(%i)]: " node in
-        let _ =
-          BaseGraph.fold_neighbors
-            (fun _ neighbors ->
-              let e = BaseGraph.get_edage graph node neighbors in
-              let _ =
-                Printf.printf "{%i -> %i = %f} " e.from e.goto e.weight
-              in
-              () )
-            () graph node
-        in
-        print_string "\n" )
-      () graph
-  in
-  print_string "======================================================\n"
-
-let rec louvain_loop g graph_length =
-  let init_f node groupid : BaseCommu.group =
-    {idx= groupid; inner= 0.0; outer= cal_k_i g node}
-  in
-  let test_c = BaseCommu.make 1024 in
-  let _ =
-    BaseGraph.fold_graph
-      (fun _ node ->
-        BaseCommu.insert test_c node (node, cal_inner g node, cal_outer g node)
-        )
-      () g
-  in
-  (* BaseCommu.init (BaseCommu.make 1024) (BaseGraph.length g, init_f) in *)
-  let _ = phase1 g test_c in
-  let _ = phase2 g test_c in
-  let _ = print_graph g in
-  let _ = Printf.printf "Q = %f\n" (cal_Q g test_c) in
-  let graph_length' = BaseGraph.length g in
-  if graph_length' = graph_length then () else louvain_loop g graph_length'
+let rec louvain_loop graph =
+  let len = BaseGraph.length graph in 
+  let commu = BaseCommu.create len in
+let _ = BaseGraph.compre_graph (fun node _ ->
+let sub_graph = BaseGraph.extract_graph graph node in
+BaseCommu.add commu sub_graph
+) graph in
+  let _ = phase1 graph commu in
+  let _ = phase2 graph commu in
+  let _ = print_graph graph in
+  let _ = print_commu_state commu in
+  let _ = Printf.printf "Q = %f\n" (cal_Q graph commu) in
+  let len' = BaseGraph.length graph in
+  if len' = len then () else louvain_loop graph
 
 ;;
-let test_data =
-  [| [|None; Some 1.0; Some 1.0|]
-   ; [|Some 1.0; None; None|]
-   ; [|Some 1.0; None; None|] |]
-in
-let test_data2 =
-[|
-[|None; None; Some 1.0; Some 1.0; Some 1.0; Some 1.0; None; None; None; None; None; None; None; None; None; None|];
-[|None; None; Some 1.0; None; Some 1.0; None; None; Some 1.0; None; None; None; None; None; None; None; None|];
-[|Some 1.0; Some 1.0; None; None; Some 1.0; Some 1.0; Some 1.0; None; None; None; None; None; None; None; None; None|];
-[|Some 1.0; None; None; None; None; None; None; Some 1.0; None; None; None; None; None; None; None; None|];
-[|Some 1.0; Some 1.0; Some 1.0; None; None; None; None; None; None; None; Some 1.0; None; None; None; None; None|];
-[|Some 1.0; None; Some 1.0; None; None; None; None; Some 1.0; None; None; None; Some 1.0; None; None; None; None|];
-[|None; None; Some 1.0; None; None; None; None; Some 1.0; None; None; None; Some 1.0; None; None; None; None|];
-[|None; Some 1.0; None; Some 1.0; None; Some 1.0; Some 1.0; None; None; None; None; None; None; None; None; None|];
-[|None; None; None; None; None; None; None; None; None; Some 1.0; Some 1.0; Some 1.0; None; None; Some 1.0; Some 1.0|];
-[|None; None; None; None; None; None; None; None; Some 1.0; None; None; None; Some 1.0; None; Some 1.0; None|];
-[|None; None; None; None; Some 1.0; None; None; None; Some 1.0; None; None; Some 1.0; Some 1.0; Some 1.0; Some 1.0; None|];
-[|None; None; None; None; None; Some 1.0; Some 1.0; None; Some 1.0; None; Some 1.0; None; None; Some 1.0; None; None|];
-[|None; None; None; None; None; None; None; None; None; Some 1.0; Some 1.0; None; None; None; None; None|];
-[|None; None; None; None; None; None; None; None; None; None; Some 1.0; Some 1.0; None; None; None; None|];
-[|None; None; None; None; None; None; None; None; Some 1.0; Some 1.0; Some 1.0; None; None; None; None; None|];
-[|None; None; None; None; None; None; None; None; Some 1.0; None; None; None; None; None; None; None|];
-|] in
-let g = BaseGraph.make_graph test_data2 in
-let _ = Printf.printf "m = %f\n" (cal_m g) in
-let _ = louvain_loop g (BaseGraph.length g) in
-()
+
+
+let g = BaseGraph.make_graph test_data_16 in
+louvain_loop g;;
 
 (* let init_f node groupid : BaseCommu.group =
  *   {idx= groupid; inner= 0.0; outer= cal_k_i g node}
