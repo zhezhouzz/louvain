@@ -31,7 +31,7 @@ module BaseCommu = struct
 
   let create (init_length : int) : community = Hashtbl.create init_length
 
-  let add (commu : community) (graph : graph) =
+  let add (commu : community) (graph : group) =
     let idx = Hashtbl.length commu in
     Hashtbl.add commu idx graph
 
