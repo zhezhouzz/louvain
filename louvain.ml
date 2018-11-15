@@ -113,6 +113,7 @@ let find_best_neighbor graph commu node =
   | Some (n, m) -> if m > 0.0 then Some n else None
 
 let rec phase1 graph commu =
+  let _ = Printf.printf "[LOOP: PHASE1]\n" in
   let if_convergence =
     (*could be convert to compre_graph. however, the commu is shared by every element in graph.*)
     BaseGraph.fold_graph
