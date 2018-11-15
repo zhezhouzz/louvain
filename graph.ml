@@ -177,7 +177,7 @@ module BaseGraph = struct
     let self = get_weight_default graph node node 0.0 in
     let delta_inner = none2zero (flow_n2g_opt graph node origin_graph) in
     let delta_outer = degree -. delta_inner -. (delta_inner -. self) in
-    let _ = origin_graph.inner <- origin_graph.inner -. (delta_inner *. 2.0) in
+    let _ = origin_graph.inner <- origin_graph.inner -. (delta_inner *. 2.0) +. self in
     let _ = origin_graph.outer <- origin_graph.outer -. delta_outer in
     let ctx = Hashtbl.find graph.hash node in
     (* let ctx_origin = Hashtbl.find origin_graph.hash node in *)
@@ -202,7 +202,7 @@ module BaseGraph = struct
     let _ = Hashtbl.add dest_graph.hash node ctx_dest in
     let delta_inner' = none2zero (flow_n2g_opt graph node dest_graph) in
     let delta_outer' = degree -. delta_inner' -. (delta_inner' -. self) in
-    let _ = dest_graph.inner <- dest_graph.inner +. (delta_inner' *. 2.0) in
+    let _ = dest_graph.inner <- dest_graph.inner +. (delta_inner' *. 2.0) -. self in
     let _ = dest_graph.outer <- dest_graph.outer +. delta_outer' in
     ()
 

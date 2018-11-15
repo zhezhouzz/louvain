@@ -67,11 +67,11 @@ let cal_delta_Q_move graph i graph_origin =
   let k_i_out = k_i -. k_i_in -. k_i_i in
   let sigma_tot = (BaseGraph.get_inner graph_origin) +. (BaseGraph.get_outer graph_origin) -. k_i_out +. k_i_in -. (2.0 *. k_i_i) in
   let two_m = BaseGraph.get_inner graph in
-  let _ =
-    Printf.printf
-      "sigma_in = %f; sigma_tot = %f; k_i = %f; k_i_in = %f; two_m = %f\n" sigma_in
-      sigma_tot k_i k_i_in two_m
-  in
+  (* let _ =
+   *   Printf.printf
+   *     "sigma_in = %f; sigma_tot = %f; k_i = %f; k_i_in = %f; two_m = %f\n" sigma_in
+   *     sigma_tot k_i k_i_in two_m
+   * in *)
   cal_delta_Q_aux sigma_in sigma_tot k_i k_i_in two_m
 
 
@@ -105,6 +105,15 @@ let find_best_neighbor graph commu node =
   | None -> None
   | Some (n, m) -> if m > 0.0 then Some n else None
 
+let print_commu_state commu =
+let _ = print_string "<---- PRINT_COMMU_STATE ---->\n" in
+let _ = BaseCommu.compre_commu (fun graph ->
+if BaseGraph.length graph = 0 then ()
+else print_graph graph 
+) commu in
+let _ = print_string "<---- PRINT_COMMU_STATE ---->\n" in
+()
+
 let rec phase1 graph commu =
   let if_convergence =
     BaseGraph.fold_graph
@@ -115,19 +124,11 @@ let rec phase1 graph commu =
         | None -> if_
         | Some neighbor ->
             let _ = BaseGraph.merge_node_crossgraph graph node (BaseCommu.which_group commu node) (BaseCommu.which_group commu neighbor) in
+(* let _ = print_commu_state commu in *)
             false )
       true graph
   in
   if if_convergence then () else phase1 graph commu
-
-let print_commu_state commu =
-let _ = print_string "<---- PRINT_COMMU_STATE ---->\n" in
-let _ = BaseCommu.compre_commu (fun graph ->
-if BaseGraph.length graph = 0 then ()
-else print_graph graph 
-) commu in
-let _ = print_string "<---- PRINT_COMMU_STATE ---->\n" in
-()
 
 let phase2 graph commu =
 BaseCommu.compre_commu (fun sub_graph ->
@@ -144,7 +145,7 @@ BaseCommu.add commu sub_graph
   let _ = phase1 graph commu in
   let _ = phase2 graph commu in
   let _ = print_graph graph in
-  let _ = print_commu_state commu in
+  (* let _ = print_commu_state commu in *)
   let _ = Printf.printf "Q = %f\n" (cal_Q graph commu) in
   let len' = BaseGraph.length graph in
   if len' = len then () else louvain_loop graph
