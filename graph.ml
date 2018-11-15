@@ -30,21 +30,18 @@ module type Graph = sig
 
   val compre_graph : (node -> nodectx -> unit) -> graph -> unit
 
+  (* extract a node to a new graph from a graph *)
   val extract_graph : graph -> node -> graph
 
+  (* There are two graph, merge a node from one to another *)
   val merge_node_crossgraph : graph -> node -> graph -> graph -> unit
 
+  (* reduce the subgraph to a node in a supergraph *)
   val dump : graph -> graph -> unit
 
   val get_inner : graph -> weight
 
   val get_outer : graph -> weight
-
-  val flow_n2g_opt : graph -> node -> graph -> weight option
-
-  val low_n2g_default : graph -> node -> graph -> weight -> weight
-
-  val get_degree : graph -> node -> weight
 end
 
 module BaseGraph = struct

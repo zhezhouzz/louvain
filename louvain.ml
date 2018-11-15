@@ -3,6 +3,16 @@ open Community
 open Utils
 open Data
 
+let cal_degree graph node =
+  BaseGraph.fold_neighbors (fun sum _ weight -> weight +. sum) 0.0 graph node
+
+let flow_n2g_zero graph node sub_graph =
+  BaseGraph.fold_graph
+    (fun sum node' _ ->
+      let w = BaseGraph.get_weight_default graph node node' 0.0 in
+      w +. sum )
+    0.0 sub_graph
+
 let cal_Q graph commu =
   let two_m = BaseGraph.get_inner graph in
   let sum =
@@ -12,8 +22,8 @@ let cal_Q graph commu =
           (fun sum' j _ ->
             if BaseCommu.in_same_group commu i j then
               let a_i_j = BaseGraph.get_weight_default graph i j 0.0 in
-              let ki = BaseGraph.get_degree graph i in
-              let kj = BaseGraph.get_degree graph j in
+              let ki = cal_degree graph i in
+              let kj = cal_degree graph j in
               sum' +. (a_i_j -. (ki *. kj /. two_m))
             else sum' )
           sum graph )
@@ -34,8 +44,8 @@ let cal_delta_Q_aux sigma_in sigma_tot k_i k_i_in two_m =
 let cal_delta_Q graph i graph_dest =
   let sigma_in = BaseGraph.get_inner graph_dest in
   let sigma_tot = BaseGraph.get_outer graph_dest +. sigma_in in
-  let k_i = BaseGraph.get_degree graph i in
-  let k_i_in = BaseGraph.flow_n2g_default graph i graph_dest 0.0 in
+  let k_i = cal_degree graph i in
+  let k_i_in = flow_n2g_zero graph i graph_dest in
   let two_m = BaseGraph.get_inner graph in
   (* let _ =
    *   Printf.printf
@@ -55,7 +65,7 @@ let n2g_notself node sub_graph =
 let cal_delta_Q_move graph i graph_origin =
   let k_i_i = BaseGraph.get_weight_default graph_origin i i 0.0 in
   let k_i_in = n2g_notself i graph_origin in
-  let k_i = BaseGraph.get_degree graph_origin i in
+  let k_i = cal_degree graph_origin i in
   let sigma_in =
     BaseGraph.get_inner graph_origin -. (2.0 *. k_i_i) -. k_i_in
   in
@@ -104,7 +114,7 @@ let find_best_neighbor graph commu node =
 
 let rec phase1 graph commu =
   let if_convergence =
-(*could be convert to compre_graph. however, the commu is shared by every element in graph.*)
+    (*could be convert to compre_graph. however, the commu is shared by every element in graph.*)
     BaseGraph.fold_graph
       (fun if_ node _ ->
         (* let _ = Printf.printf "phase1: node(%i)\n" node in *)
