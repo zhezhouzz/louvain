@@ -113,23 +113,20 @@ let find_best_neighbor graph commu node =
   | Some (n, m) -> if m > 0.0 then Some n else None
 
 let rec phase1 graph commu =
-  let if_convergence =
-    (*could be convert to compre_graph. however, the commu is shared by every element in graph.*)
-    BaseGraph.fold_graph
-      (fun if_ node _ ->
+  let mergetbl = Hashtbl.create (BaseGraph.length graph) in
+  let _ = BaseGraph.compre_graph
+      (fun node _ ->
         (* let _ = Printf.printf "phase1: node(%i)\n" node in *)
         let best_neighbor = find_best_neighbor graph commu node in
         match best_neighbor with
-        | None -> if_
-        | Some neighbor ->
-            let _ =
-              BaseGraph.merge_node_crossgraph graph node
+        | None -> ()
+        | Some neighbor -> Hashtbl.add mergetbl node neighbor) graph in
+ let _ = Hashtbl.fold (fun node neighbor _ ->
+BaseGraph.merge_node_crossgraph graph node
                 (BaseCommu.which_group commu node)
                 (BaseCommu.which_group commu neighbor)
-            in
-            false )
-      true graph
-  in
+) mergetbl () in
+let if_convergence = if (Hashtbl.length mergetbl) = 0 then true else false in
   if if_convergence then () else phase1 graph commu
 
 let phase2 graph commu =
